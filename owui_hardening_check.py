@@ -2,18 +2,20 @@
 title: Open WebUI Hardening Check
 author: MV2 of Munim, Inc.
 author_url: https://github.com/munimv2/openwebui-hardening-check
-version: 0.1.0
+version: 0.1.1
 license: MIT
 description: Checks an Open WebUI deployment against the official Hardening guide and known security advisories. Read-only, standard library only, and it never shows secret values. Made with AI agents for MV2 of Munim, Inc.
 """
 # Command line:
 #   python3 owui_hardening_check.py docker-compose.yml .env
 #   python3 owui_hardening_check.py --url https://chat.example.com
+#   python3 owui_hardening_check.py .webui_secret_key        (pip installs)
 # Inside Open WebUI: add this file under Admin Panel > Functions; admins can
 # then chat with it to check the running server's own settings. (No shebang:
 # Open WebUI only reads the metadata above when the file starts with it.)
 
 import argparse
+import calendar
 import ipaddress
 import json
 import os
@@ -24,11 +26,12 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
-__version__ = "0.1.0"
-DATA_DATE = "13 October 2026"
+__version__ = "0.1.1"
+DATA_DATE = "14 October 2026"
 REPO = "https://github.com/munimv2/openwebui-hardening-check"
 GUIDE = "https://docs.openwebui.com/getting-started/advanced-topics/hardening/"
 ADVISORY_PAGE = "https://github.com/open-webui/open-webui/security/advisories"
+RELEASE_0_12_0 = "https://github.com/open-webui/open-webui/releases/tag/v0.12.0"
 PROBE_ORIGIN = "https://cors-check.invalid"
 
 SEVERITIES = ["critical", "high", "medium", "low", "info"]
@@ -54,7 +57,7 @@ WEAK_SECRETS = {
 }
 
 # Open WebUI advisories: [first affected or None, fixed in, ids, summary, source].
-# Checked against the linked advisories on 13 October 2026.
+# Checked against the linked advisories on 14 October 2026.
 ADVISORIES = [
     [None, "0.9.0", "CVE-2026-44721, CVE-2026-45349",
      "Stored XSS through models; a user with an API key can continue another user's chat.",
@@ -71,17 +74,33 @@ ADVISORIES = [
     ["0.8.11", "0.11.1", "CVE-2026-87995",
      "Terminal port preview allows same-origin script execution and session theft (High).",
      "https://github.com/advisories/GHSA-jmc6-2wr8-h3wj"],
-    ["0.6.27", "0.11.1", "CVE-2026-87011, CVE-2026-87015 and others",
-     "Unauthenticated back-channel logout requests can stall the server; access-control bugs in notes, knowledge search and channels.",
+    ["0.6.27", "0.11.1", "CVE-2026-87011, CVE-2026-87015, CVE-2026-88006 and others",
+     "Unauthenticated back-channel logout requests can stall the server; access-control bugs in notes, knowledge search, channels and the OAuth role policy.",
      "https://github.com/advisories?query=open-webui+0.11.1"],
     ["0.7.0", "0.11.4", "GHSA-vpq8-f445-hcq7",
      "Any website a signed-in user visits can steal their session token through the community-sharing message handler (CVSS 8.1; only while community sharing is on, the default).",
      "https://github.com/open-webui/open-webui/security/advisories/GHSA-vpq8-f445-hcq7"],
-    [None, "0.11.4", "GHSA-wf9m-46cp-c6h6, GHSA-qpqv-xwg8-cqpj and others",
-     "javascript: links in chat messages or shared-chat citations can steal a viewer's session token; terminal-proxy access control and memory-exhaustion bugs.",
+    ["0.11.1", "0.11.4", "GHSA-f9xp-mfmq-x6cg",
+     "Any signed-in user can steal another user's session token with a script inside a DOCX file preview (High).",
+     "https://github.com/open-webui/open-webui/security/advisories/GHSA-f9xp-mfmq-x6cg"],
+    ["0.6.33", "0.11.4", "GHSA-qpqv-xwg8-cqpj",
+     "A script link in a shared chat's citation can steal the viewer's session token (High).",
+     "https://github.com/open-webui/open-webui/security/advisories/GHSA-qpqv-xwg8-cqpj"],
+    ["0.8.6", "0.11.4", "GHSA-q46m-r89w-j74p",
+     "Terminal users can manage Terminals policies and other users' terminals through the terminal proxy (High).",
+     "https://github.com/open-webui/open-webui/security/advisories/GHSA-q46m-r89w-j74p"],
+    [None, "0.11.4", "GHSA-wf9m-46cp-c6h6, GHSA-gqfh-jxvw-74rp, GHSA-hm62-64q2-6gxw and others",
+     "javascript: links in chat messages can steal a viewer's session token; other users' session tokens leak through OAuth-mode connections, tool servers and terminals; disabled model backends stay reachable; memory-exhaustion and stall bugs.",
      ADVISORY_PAGE],
+    [None, "0.12.0", "0.12.0 release notes",
+     "Security and access-control fixes, for example admins acting on other users' chats through the API, shared chats showing the owner's system prompt, and private-address checks on skill imports. Open WebUI withholds some advisories for a short time so admins can update first.",
+     RELEASE_0_12_0],
 ]
-SAFE_VERSION = "0.11.4"
+SAFE_VERSION = "0.12.0"
+
+# `open-webui serve` (pip installs) made .webui_secret_key with Python's random
+# module until 0.12.0 switched it to secrets; existing files are kept.
+SECURE_KEY_SINCE = calendar.timegm((2026, 10, 10, 21, 13, 24, 0, 0, 0))   # 0.12.0 release
 
 
 def parse_version(text):
@@ -465,11 +484,21 @@ def check_env(env, version=None, inside=False):
             "Set ENABLE_PASSWORD_VALIDATION=true (and PASSWORD_VALIDATION_REGEX_PATTERN with a hint if you want your own rule).",
             setting="ENABLE_PASSWORD_VALIDATION"))
 
-    if _flag(env, "ENABLE_MFA", False) is False:
+    mfa = _flag(env, "ENABLE_MFA", False)
+    if mfa is False:
         out.append(finding(
             "low", "Two-factor sign-in is off",
-            "Set ENABLE_MFA=true, or enforce a second factor at your identity provider.",
-            setting="ENABLE_MFA"))
+            "Update to 0.12.0 or newer, which adds ENABLE_MFA, then set ENABLE_MFA=true; or enforce a second factor at your identity provider."
+            if version is not None and version < (0, 12, 0) else
+            "Set ENABLE_MFA=true (or Admin Panel > Settings > Authentication), or enforce a second factor at your identity provider.",
+            setting="ENABLE_MFA", source=RELEASE_0_12_0))
+    elif mfa:
+        for name, way in (("MFA_ALLOW_OAUTH_BYPASS", "OAuth"), ("MFA_ALLOW_TRUSTED_HEADER_BYPASS", "trusted-header")):
+            if _flag(env, name, False):
+                out.append(finding(
+                    "low", "%s sign-ins skip the second factor (%s=true)" % (way, name),
+                    "That is fine only when your identity provider or proxy enforces its own second factor; otherwise set %s=false." % name,
+                    setting=name, source=RELEASE_0_12_0))
 
     audit = _value(env, "AUDIT_LOG_LEVEL", default="NONE")
     if audit is not None and audit.strip().upper() in ("NONE", ""):
@@ -484,6 +513,20 @@ def check_env(env, version=None, inside=False):
             "Use ENV=prod (the default). Dev mode exposes the API docs at /docs.",
             setting="ENV"))
     return out
+
+
+def check_key_file(mtime, version=None):
+    """Finding for a .webui_secret_key that `open-webui serve` may have made
+    before 0.12.0. Only the file's date is used; the key itself is never read here."""
+    if (version is None or version >= (0, 12, 0)) and mtime >= SECURE_KEY_SINCE:
+        return []
+    return [finding(
+        "low", "The secret key file is older than Open WebUI 0.12.0 (.webui_secret_key)",
+        "Stop Open WebUI, delete .webui_secret_key (or set WEBUI_SECRET_KEY to the output of `openssl rand -base64 32`) and start it again. Everyone has to sign in again. Updating alone keeps the old file.",
+        detail="When `open-webui serve` (pip install) creates this file, versions before 0.12.0 used Python's random.randbytes, "
+               "which isn't meant for secrets; 0.12.0 switched to secrets.token_bytes. No practical attack is known, but this key signs "
+               "every session token. Docker images create it with /dev/random and aren't affected.",
+        setting="WEBUI_SECRET_KEY", source=RELEASE_0_12_0)]
 
 
 def _tag(image):
@@ -525,14 +568,17 @@ def check_version(version, label=""):
             "info", "Open WebUI version unknown",
             "Run the check with --url, pin a release tag in your image, or look under Settings > About.",
             source=ADVISORY_PAGE)]
-    hits = []
+    hits, published = [], False
     for first, fixed, ids, summary, source in ADVISORIES:
         if (first is None or version >= parse_version(first)) and version < parse_version(fixed):
             hits.append("%s (fixed in %s): %s %s" % (ids, fixed, summary, source))
+            published = published or "GHSA-" in ids or "CVE-" in ids
     if not hits:
         return []
+    # Fixes known only from release notes, without a published advisory, count as medium.
     return [finding(
-        "high", "Open WebUI %s has %d known advisor%s" % (label or ".".join(map(str, version)), len(hits), "y" if len(hits) == 1 else "ies"),
+        "high" if published else "medium",
+        "Open WebUI %s has %d known advisor%s" % (label or ".".join(map(str, version)), len(hits), "y" if len(hits) == 1 else "ies"),
         "Update to %s or newer; the latest release is safest. Then use Sign out all devices so stolen tokens stop working." % SAFE_VERSION,
         detail="\n".join(hits), source=ADVISORY_PAGE)]
 
@@ -703,7 +749,10 @@ def _read(path):
         return f.read()
 
 
-def run(files=(), url=None, read=_read, fetch=_fetch):
+KEY_FILE = ".webui_secret_key"
+
+
+def run(files=(), url=None, read=_read, fetch=_fetch, mtime=os.path.getmtime):
     """Returns (findings, sources, version label)."""
     findings, sources = [], []
     version, label = None, None
@@ -713,6 +762,11 @@ def run(files=(), url=None, read=_read, fetch=_fetch):
         sources.append(url)
         if version:
             label = "%s (from %s)" % (".".join(map(str, version)), url.rstrip("/"))
+    key_files = [p for p in files if os.path.basename(p) == KEY_FILE]
+    files = [p for p in files if p not in key_files]
+    for p in key_files:
+        findings += check_key_file(mtime(p), version)
+        sources.append(KEY_FILE + " (date only)")
     if files:
         dep = merge([parse_text(read(p), os.path.basename(p)) for p in files])
         sources += dep.sources
@@ -731,7 +785,8 @@ def main(argv=None):
         description="Check an Open WebUI deployment against the official Hardening guide and known advisories. "
                     "Read-only; secret values are never printed.")
     p.add_argument("files", nargs="*", help=".env, docker-compose.yml, `docker inspect` JSON, a file with your "
-                                            "`docker run` command, or a Kubernetes manifest")
+                                            "`docker run` command, a Kubernetes manifest, or a pip install's "
+                                            ".webui_secret_key (only its date is used)")
     p.add_argument("--url", help="the address of an Open WebUI server you run, e.g. https://chat.example.com")
     p.add_argument("--json", action="store_true", help="print JSON")
     p.add_argument("--markdown", action="store_true", help="print Markdown")
@@ -769,6 +824,20 @@ def _running_version():
         return None
 
 
+def _serve_key_file(env, cwd):
+    """Path of the key file `open-webui serve` made and is using, or None.
+    Docker images (DOCKER=true) make theirs with /dev/random in start.sh."""
+    if (env.get("DOCKER") or "").lower() == "true":
+        return None
+    path = os.path.join(cwd, KEY_FILE)
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            in_use = f.read() == env.get("WEBUI_SECRET_KEY")
+    except OSError:
+        return None
+    return path if in_use else None
+
+
 class Pipe:
     """Admins chat with "Hardening check" to check this server's own environment."""
 
@@ -780,7 +849,11 @@ class Pipe:
             return "Only an admin can run the hardening check."
         raw = _running_version()
         version = parse_version(raw)
-        findings = check_env(dict(os.environ), version, inside=True) + check_version(version, raw or "")
+        env = dict(os.environ)
+        findings = check_env(env, version, inside=True) + check_version(version, raw or "")
+        key_file = _serve_key_file(env, os.getcwd())
+        if key_file:
+            findings += check_key_file(os.path.getmtime(key_file), version)
         return render_markdown(findings, ["this server's environment"], raw)
 
 

@@ -156,6 +156,15 @@ class EnvCheckTests(unittest.TestCase):
         self.assertIn("GHSA-vpq8-f445-hcq7", old[0]["detail"])
         self.assertEqual(new[0]["severity"], "medium")
 
+    def test_mfa(self):
+        def mfa(env, version=None):
+            return [f for f in owc.check_env(env, version) if (f["setting"] or "").startswith(("ENABLE_MFA", "MFA_"))]
+        self.assertIn("Update to 0.12.0", mfa({}, (0, 11, 4))[0]["fix"])
+        self.assertNotIn("Update to", mfa({}, (0, 12, 0))[0]["fix"])
+        self.assertEqual(mfa({"ENABLE_MFA": "true"}), [])
+        found = mfa({"ENABLE_MFA": "true", "MFA_ALLOW_OAUTH_BYPASS": "True", "MFA_ALLOW_TRUSTED_HEADER_BYPASS": "false"})
+        self.assertEqual([(f["severity"], f["setting"]) for f in found], [("low", "MFA_ALLOW_OAUTH_BYPASS")])
+
     def test_risky_switches(self):
         env = {"ENABLE_OPENAI_API_PASSTHROUGH": "true", "OAUTH_MERGE_ACCOUNTS_BY_EMAIL": "true",
                "REQUESTS_VERIFY": "false", "ENABLE_LDAP": "true", "GOOGLE_CLIENT_ID": "x",
@@ -171,14 +180,49 @@ class EnvCheckTests(unittest.TestCase):
 class VersionTests(unittest.TestCase):
     def test_versions(self):
         found = owc.check_version((0, 11, 2), "v0.11.2")
-        self.assertEqual(found[0]["title"], "Open WebUI v0.11.2 has 2 known advisories")
+        self.assertEqual(found[0]["title"], "Open WebUI v0.11.2 has 6 known advisories")
+        self.assertEqual(found[0]["severity"], "high")
         self.assertIn("GHSA-vpq8-f445-hcq7", found[0]["detail"])
+        self.assertIn("GHSA-f9xp-mfmq-x6cg", found[0]["detail"])
         self.assertNotIn("CVE-2026-87016", found[0]["detail"])
         self.assertEqual(owc.check_version((0, 12, 0)), [])
         self.assertEqual(owc.check_version(None)[0]["severity"], "info")
-        self.assertEqual(owc.check_version((0, 6, 0))[0]["title"], "Open WebUI 0.6.0 has 5 known advisories")
+        self.assertEqual(owc.check_version((0, 6, 0))[0]["title"], "Open WebUI 0.6.0 has 6 known advisories")
         self.assertEqual(owc.parse_version("v0.11.4-cuda"), (0, 11, 4))
         self.assertIsNone(owc.parse_version("main"))
+
+    def test_release_note_fixes_only(self):
+        found = owc.check_version((0, 11, 4))
+        self.assertEqual(found[0]["title"], "Open WebUI 0.11.4 has 1 known advisory")
+        self.assertEqual(found[0]["severity"], "medium")
+        self.assertIn("0.12.0", found[0]["fix"])
+
+
+class KeyFileTests(unittest.TestCase):
+    def test_dates_and_versions(self):
+        old, new = owc.SECURE_KEY_SINCE - 60, owc.SECURE_KEY_SINCE + 60
+        self.assertEqual(owc.check_key_file(new), [])
+        self.assertEqual(owc.check_key_file(new, (0, 12, 0)), [])
+        self.assertEqual(owc.check_key_file(old)[0]["severity"], "low")
+        self.assertEqual(len(owc.check_key_file(old, (0, 12, 0))), 1)
+        self.assertEqual(len(owc.check_key_file(new, (0, 11, 4))), 1)    # still made by an old `serve`
+
+    def test_cli_uses_only_the_date(self):
+        def no_read(path):
+            raise AssertionError("the key file must not be read: %s" % path)
+        findings, sources, _ = owc.run([os.path.join("home", owc.KEY_FILE)], read=no_read, mtime=lambda p: 0)
+        self.assertEqual(sources, [".webui_secret_key (date only)"])
+        self.assertEqual([f["setting"] for f in by_severity(findings, "low")], ["WEBUI_SECRET_KEY"])
+
+    def test_serve_key_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, owc.KEY_FILE), "w", encoding="utf-8") as f:
+                f.write("c2VjcmV0LWtleS1mb3ItdGVzdHM=")
+            env = {"WEBUI_SECRET_KEY": "c2VjcmV0LWtleS1mb3ItdGVzdHM="}
+            self.assertEqual(owc._serve_key_file(env, d), os.path.join(d, owc.KEY_FILE))
+            self.assertIsNone(owc._serve_key_file(dict(env, DOCKER="true"), d))
+            self.assertIsNone(owc._serve_key_file({"WEBUI_SECRET_KEY": "something-else"}, d))
+        self.assertIsNone(owc._serve_key_file(env, os.path.join(d, "gone")))
 
 
 def fake_fetch(cfg, headers=None, page_headers=None, status=200):
