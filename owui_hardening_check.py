@@ -3,7 +3,7 @@ title: Open WebUI Hardening Check
 author: MV2 of Munim, Inc.
 author_url: https://github.com/munimv2/openwebui-hardening-check
 version: 0.1.2
-license: MIT
+license: Apache-2.0
 description: Checks an Open WebUI deployment against the official Hardening guide and known security advisories. Read-only, standard library only, and it never shows secret values. Made with AI agents for MV2 of Munim, Inc.
 """
 # Command line:
