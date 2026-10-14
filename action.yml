@@ -1,0 +1,47 @@
+name: Open WebUI hardening check
+description: Check Open WebUI compose, .env and Kubernetes files against the official Hardening guide and known advisories.
+author: MV2 of Munim, Inc.
+branding:
+  icon: shield
+  color: green
+inputs:
+  files:
+    description: Files to check, separated by spaces or new lines, relative to the repository root. Wildcards work. Missing files are skipped with a warning.
+    required: false
+    default: docker-compose.yml .env
+  url:
+    description: Address of an Open WebUI server you run, checked the way any visitor sees it before signing in. Empty checks files only.
+    required: false
+    default: ""
+  fail-on:
+    description: Fail the step when a finding is this severe or worse (critical, high, medium, low or never).
+    required: false
+    default: high
+outputs:
+  report:
+    description: Path of the JSON report.
+    value: ${{ steps.check.outputs.report }}
+  critical:
+    description: Number of critical findings.
+    value: ${{ steps.check.outputs.critical }}
+  high:
+    description: Number of high findings.
+    value: ${{ steps.check.outputs.high }}
+  medium:
+    description: Number of medium findings.
+    value: ${{ steps.check.outputs.medium }}
+  low:
+    description: Number of low findings.
+    value: ${{ steps.check.outputs.low }}
+runs:
+  using: composite
+  steps:
+    - id: check
+      shell: bash
+      env:
+        CHECK_FILES: ${{ inputs.files }}
+        CHECK_URL: ${{ inputs.url }}
+        CHECK_FAIL_ON: ${{ inputs.fail-on }}
+      run: |
+        PYTHON="$(command -v python3 || command -v python)"
+        "$PYTHON" "$GITHUB_ACTION_PATH/github_action.py"

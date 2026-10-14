@@ -2,7 +2,7 @@
 title: Open WebUI Hardening Check
 author: MV2 of Munim, Inc.
 author_url: https://github.com/munimv2/openwebui-hardening-check
-version: 0.1.1
+version: 0.1.2
 license: MIT
 description: Checks an Open WebUI deployment against the official Hardening guide and known security advisories. Read-only, standard library only, and it never shows secret values. Made with AI agents for MV2 of Munim, Inc.
 """
@@ -26,12 +26,13 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 DATA_DATE = "14 October 2026"
 REPO = "https://github.com/munimv2/openwebui-hardening-check"
 GUIDE = "https://docs.openwebui.com/getting-started/advanced-topics/hardening/"
 ADVISORY_PAGE = "https://github.com/open-webui/open-webui/security/advisories"
 RELEASE_0_12_0 = "https://github.com/open-webui/open-webui/releases/tag/v0.12.0"
+CONFIG_SOURCE = "https://github.com/open-webui/open-webui/blob/v0.12.0/backend/open_webui/config.py"
 PROBE_ORIGIN = "https://cors-check.invalid"
 
 SEVERITIES = ["critical", "high", "medium", "low", "info"]
@@ -278,6 +279,26 @@ def parse_duration(text):
     return sum(float(a) * unit[b] for a, b in parts)
 
 
+def cors_problems(value, custom_schemes=""):
+    """(entries Open WebUI refuses at startup, entries no browser sends) for a
+    CORS_ALLOW_ORIGIN other than *. Open WebUI splits the value on ';', stops at
+    startup on an entry without a host or with another scheme (config.py), and
+    compares the rest exactly with the browser's Origin header."""
+    schemes = ["http", "https"] + custom_schemes.split(";")
+    rejected, unmatched = [], []
+    for entry in value.split(";"):
+        try:
+            parts = urlsplit(entry.strip())
+            bad = parts.scheme not in schemes or not parts.netloc
+        except ValueError:
+            bad = True
+        if bad:
+            rejected.append(entry.strip() or "an empty entry")
+        elif entry != entry.strip() or parts.path or parts.query or "," in parts.netloc:
+            unmatched.append(entry.strip())
+    return rejected, unmatched
+
+
 def check_env(env, version=None, inside=False):
     """Findings for Open WebUI environment settings, following the official Hardening guide."""
     out = []
@@ -357,11 +378,26 @@ def check_env(env, version=None, inside=False):
             setting="ENABLE_COMMUNITY_SHARING"))
 
     cors = _value(env, "CORS_ALLOW_ORIGIN", default="*")
-    if cors is not None and cors.strip() in ("*", ""):
+    if cors is not None and cors.strip() == "*":
         out.append(finding(
             "medium", "CORS allows every origin (CORS_ALLOW_ORIGIN=*, the default)",
             "Set CORS_ALLOW_ORIGIN to your exact address, e.g. https://chat.example.com (separate several with ;).",
+            detail="Open WebUI logs \"WARNING: CORS_ALLOW_ORIGIN IS SET TO '*' - NOT RECOMMENDED FOR PRODUCTION DEPLOYMENTS.\" at startup for this setting.",
             setting="CORS_ALLOW_ORIGIN"))
+    elif cors is not None:
+        rejected, unmatched = cors_problems(cors, _value(env, "CORS_ALLOW_CUSTOM_SCHEME", default="") or "")
+        if rejected:
+            out.append(finding(
+                "medium", "Open WebUI won't start with this CORS_ALLOW_ORIGIN (%s)" % ", ".join(rejected),
+                "Give each address with its scheme, e.g. https://chat.example.com;http://localhost:3000. Don't end the list with ; and don't mix * with addresses.",
+                detail="Open WebUI checks every ;-separated entry at startup and stops with \"Invalid URL structure in CORS_ALLOW_ORIGIN\" or \"Invalid scheme in CORS_ALLOW_ORIGIN\" when one has no scheme or host.",
+                setting="CORS_ALLOW_ORIGIN", source=CONFIG_SOURCE))
+        if unmatched:
+            out.append(finding(
+                "low", "CORS_ALLOW_ORIGIN has entries no browser sends (%s)" % ", ".join(unmatched),
+                "Use scheme, host and port only (no trailing slash or path), separated by ; without spaces, e.g. https://chat.example.com;http://localhost:3000.",
+                detail="Open WebUI compares each entry exactly with the browser's Origin header, for the API and for websockets. An entry that never matches gives CORS errors or \"is not an accepted origin\" in the logs.",
+                setting="CORS_ALLOW_ORIGIN", source=CONFIG_SOURCE))
 
     if _flag(env, "WEBUI_SESSION_COOKIE_SECURE", False) is False:
         out.append(finding(

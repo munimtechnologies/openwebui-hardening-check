@@ -4,6 +4,7 @@ Check an Open WebUI deployment against the official [Hardening guide](https://do
 
 - Reads your `docker-compose.yml`, `.env`, `docker inspect` output, `docker run` command or Kubernetes manifest. It can also check the address of a server you run.
 - Installs as an Open WebUI Function too, so an admin can check the running server from a chat.
+- Runs as a GitHub Action, so a pull request that weakens your deployment files fails before it ships.
 - One Python file, standard library only, read-only. **Secret values are never printed**: for `WEBUI_SECRET_KEY` it reports only whether the key is set, how long it is, and whether it's a well-known example value.
 
 Made with AI agents for MV2 of Munim, Inc. Advisory data was checked on 14 October 2026, including Open WebUI 0.12.0 (10 October 2026).
@@ -32,7 +33,7 @@ Options:
 Example output (shortened):
 
 ```
-Open WebUI hardening check 0.1.1
+Open WebUI hardening check 0.1.2
 Checked: docker-compose.yml
 Open WebUI version: v0.11.2 (from the image tag)
 
@@ -49,6 +50,33 @@ LOW       Session tokens last 4 weeks (the default)
 ...
 ```
 
+## In CI (GitHub Actions)
+
+If your deployment files (`docker-compose.yml`, an `.env` template, Kubernetes manifests) live in a repository, check them on every push and pull request:
+
+```yaml
+# .github/workflows/openwebui-hardening.yml
+name: Open WebUI hardening
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: munimv2/openwebui-hardening-check@v0.1.2
+        with:
+          files: docker-compose.yml deploy/*.yaml   # spaces or new lines; wildcards work
+          fail-on: high                              # critical, high, medium, low or never
+```
+
+- The report goes to the job log and the job summary. Critical and high findings become error annotations, medium ones warnings.
+- The step fails when a finding is at least as severe as `fail-on`.
+- Outputs: `report` (path of the JSON report) and the counts `critical`, `high`, `medium` and `low`.
+- Files that don't exist are skipped with a warning.
+- `url` also works. Only use it for a server you run, and keep in mind that the job summary shows the address.
+
+It needs Python 3, which GitHub's Linux and macOS runners have. Pin a release tag (`@v0.1.2`) and update on purpose.
+
 ## What it checks
 
 From your files (or, inside Open WebUI, from the server's own environment):
@@ -57,7 +85,7 @@ From your files (or, inside Open WebUI, from the server's own environment):
 |---|---|
 | Sign-in | `WEBUI_AUTH=False`; `DEFAULT_USER_ROLE` of `user` or `admin`; sign-up left on; trusted-header sign-in (`WEBUI_AUTH_TRUSTED_EMAIL_HEADER`); password rules; two-factor sign-in (`ENABLE_MFA`, new in 0.12.0) and the `MFA_ALLOW_OAUTH_BYPASS` / `MFA_ALLOW_TRUSTED_HEADER_BYPASS` exceptions |
 | Sessions | `WEBUI_SECRET_KEY` missing, short or a well-known example (such as the old default `t0p-s3cr3t`); a `.webui_secret_key` made by `open-webui serve` before 0.12.0 (see below); `JWT_EXPIRES_IN=-1`, values longer than 7 days, or values Open WebUI may not read (such as `86400` without a unit); cookie `Secure` and `SameSite` |
-| Network | `CORS_ALLOW_ORIGIN=*`; `FORWARDED_ALLOW_IPS=*`; port 8080 published on every interface; image tags such as `:main` that move |
+| Network | `CORS_ALLOW_ORIGIN=*`, and entries that stop Open WebUI from starting or never match (see below); `FORWARDED_ALLOW_IPS=*`; port 8080 published on every interface; image tags such as `:main` that move |
 | SSO and LDAP | `OAUTH_MERGE_ACCOUNTS_BY_EMAIL`; OAuth sign-up without `OAUTH_ALLOWED_DOMAINS`; LDAP without TLS or certificate checks |
 | Data and features | community sharing, admin chat export, OpenAI passthrough, direct connections, API keys without endpoint restrictions, Jupyter code execution, runtime `pip install` by Tools, private-address web fetches (SSRF), TLS verification switched off, no audit log, `ENV=dev` |
 | Version | every advisory in [`ADVISORIES`](owui_hardening_check.py) against the version from `--url`, the image tag or the running server, including the advisories fixed in 0.11.4 and published on 27 and 28 September 2026 (the High ones are named one by one) and the security fixes in the 0.12.0 release notes. Updating to 0.12.0 or newer fixes all of them. |
@@ -69,6 +97,23 @@ With `--url`, it reads only what any visitor's browser loads before signing in:
 - The security headers on the start page.
 
 It never signs in, sends a password or changes anything. Only run it against servers you run.
+
+### "CORS_ALLOW_ORIGIN IS SET TO '*'" in the logs
+
+At startup Open WebUI logs `WARNING: CORS_ALLOW_ORIGIN IS SET TO '*' - NOT RECOMMENDED FOR PRODUCTION DEPLOYMENTS.` when `CORS_ALLOW_ORIGIN` isn't set. Then any website can make cross-origin requests to your server. To fix it, list the exact addresses people open Open WebUI at, separated by `;`:
+
+```sh
+CORS_ALLOW_ORIGIN=https://chat.example.com;http://localhost:3000
+```
+
+The same list decides which websocket connections are accepted, so leave out an address people use and you'll see `is not an accepted origin` in the logs. In [0.12.0's config.py](https://github.com/open-webui/open-webui/blob/v0.12.0/backend/open_webui/config.py) Open WebUI splits the value on `;` and checks each entry at startup:
+
+| You wrote | What happens | The tool says |
+|---|---|---|
+| `chat.example.com` (no `https://`), `https://a.example.com;` (ends with `;`), `*;https://a.example.com`, or an empty value | Open WebUI stops at startup with `Invalid URL structure in CORS_ALLOW_ORIGIN` | medium: won't start |
+| `https://chat.example.com/` (trailing slash), `https://a.example.com,https://b.example.com` (commas), `https://a.example.com; https://b.example.com` (space) | It starts, but browsers never send that origin, so requests and websockets from it fail | low: no browser sends it |
+
+Custom schemes such as `app://` are allowed only when they're listed in `CORS_ALLOW_CUSTOM_SCHEME`.
 
 ### The secret key file of pip installs
 
@@ -107,12 +152,14 @@ After paying, email munimversion2@gmail.com three things:
 
 The review arrives within 48 hours of receiving everything. MV2 never asks for passwords, keys or remote access.
 
+Also by MV2: [dify-hardening-check](https://github.com/munimv2/dify-hardening-check), the same kind of check for Dify.
+
 Open WebUI is a trademark of its owners. This project is not affiliated with or endorsed by Open WebUI.
 
 ## Development
 
 ```sh
-python3 -m unittest test_owui_hardening_check.py
+python3 -m unittest test_owui_hardening_check.py test_action.py
 ```
 
-MIT licensed. Sources: the [Open WebUI Hardening guide](https://docs.openwebui.com/getting-started/advanced-topics/hardening/), the [environment variable reference](https://docs.openwebui.com/reference/env-configuration/), [Open WebUI's security advisories](https://github.com/open-webui/open-webui/security/advisories) and the [0.12.0 release notes](https://github.com/open-webui/open-webui/releases/tag/v0.12.0).
+MIT licensed. Sources: the [Open WebUI Hardening guide](https://docs.openwebui.com/getting-started/advanced-topics/hardening/), the [environment variable reference](https://docs.openwebui.com/reference/env-configuration/), [Open WebUI's security advisories](https://github.com/open-webui/open-webui/security/advisories), the [0.12.0 release notes](https://github.com/open-webui/open-webui/releases/tag/v0.12.0) and [0.12.0's config.py](https://github.com/open-webui/open-webui/blob/v0.12.0/backend/open_webui/config.py).
