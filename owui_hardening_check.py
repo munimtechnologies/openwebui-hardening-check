@@ -1,7 +1,7 @@
 """
 title: Open WebUI Hardening Check
 author: MV2 of Munim, Inc.
-author_url: https://github.com/munimv2/openwebui-hardening-check
+author_url: https://github.com/munimtechnologies/openwebui-hardening-check
 version: 0.1.2
 license: Apache-2.0
 description: Checks an Open WebUI deployment against the official Hardening guide and known security advisories. Read-only, standard library only, and it never shows secret values. Made with AI agents for MV2 of Munim, Inc.
@@ -28,7 +28,7 @@ from urllib.parse import urlsplit
 
 __version__ = "0.1.2"
 DATA_DATE = "14 October 2026"
-REPO = "https://github.com/munimv2/openwebui-hardening-check"
+REPO = "https://github.com/munimtechnologies/openwebui-hardening-check"
 GUIDE = "https://docs.openwebui.com/getting-started/advanced-topics/hardening/"
 ADVISORY_PAGE = "https://github.com/open-webui/open-webui/security/advisories"
 RELEASE_0_12_0 = "https://github.com/open-webui/open-webui/releases/tag/v0.12.0"

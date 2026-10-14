@@ -12,7 +12,7 @@ Made with AI agents for MV2 of Munim, Inc. Advisory data was checked on 14 Octob
 ## Quick start
 
 ```sh
-curl -O https://raw.githubusercontent.com/munimv2/openwebui-hardening-check/main/owui_hardening_check.py
+curl -O https://raw.githubusercontent.com/munimtechnologies/openwebui-hardening-check/main/owui_hardening_check.py
 
 python3 owui_hardening_check.py docker-compose.yml .env
 python3 owui_hardening_check.py --url https://chat.example.com
@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: munimv2/openwebui-hardening-check@v0.1.2
+      - uses: munimtechnologies/openwebui-hardening-check@v0.1.2
         with:
           files: docker-compose.yml deploy/*.yaml   # spaces or new lines; wildcards work
           fail-on: high                              # critical, high, medium, low or never
@@ -136,7 +136,7 @@ The function reads the server's own environment variables and version, plus the 
 - **Withheld advisories.** Open WebUI holds back some advisories for a short time after a release so admins can update. The tool counts the 0.12.0 fixes from the release notes until those advisories are published.
 - **Not a scanner or a certification.** This is general technical information. It doesn't scan networks or test for vulnerabilities.
 
-If a range or a default is wrong or out of date, please [open an issue](https://github.com/munimv2/openwebui-hardening-check/issues).
+If a range or a default is wrong or out of date, please [open an issue](https://github.com/munimtechnologies/openwebui-hardening-check/issues).
 
 ## Written review
 
@@ -147,12 +147,12 @@ MV2 of Munim, Inc. also writes a review of a self-hosted AI setup. It covers wha
 
 After paying, email munimversion2@gmail.com three things:
 - the `--json` output of this tool (remove the URL if you prefer),
-- the output of [`local_ai_checkup.py --json`](https://github.com/munimv2/local-ai-checkup) from each machine,
+- the output of [`local_ai_checkup.py --json`](https://github.com/munimtechnologies/local-ai-checkup) from each machine,
 - your OS and what the server is used for.
 
 The review arrives within 48 hours of receiving everything. MV2 never asks for passwords, keys or remote access.
 
-Also by MV2: [dify-hardening-check](https://github.com/munimv2/dify-hardening-check), the same kind of check for Dify.
+Also by MV2: [dify-hardening-check](https://github.com/munimtechnologies/dify-hardening-check), the same kind of check for Dify.
 
 Open WebUI is a trademark of its owners. This project is not affiliated with or endorsed by Open WebUI.
 
