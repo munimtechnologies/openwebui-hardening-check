@@ -177,6 +177,25 @@ class EnvCheckTests(unittest.TestCase):
         medium = {f["setting"] for f in by_severity(found, "medium")}
         self.assertTrue({"OAUTH_ALLOWED_DOMAINS", "ENABLE_API_KEYS", "CODE_INTERPRETER_ENGINE"} <= medium)
 
+    def test_direct_connections_removed_in_0_13_4(self):
+        env = {"ENABLE_DIRECT_CONNECTIONS": "True"}
+        for version in (None, (0, 13, 3)):
+            found = [f for f in owc.check_env(env, version) if f["setting"] == "ENABLE_DIRECT_CONNECTIONS"]
+            self.assertEqual([f["severity"] for f in found], ["medium"])
+        found = owc.check_env(env, (0, 13, 4))
+        self.assertFalse(any(f["setting"] == "ENABLE_DIRECT_CONNECTIONS" for f in found))
+        notes = [f for f in by_severity(found, "info") if "ENABLE_DIRECT_CONNECTIONS" in f["title"]]
+        self.assertEqual(len(notes), 1)
+        self.assertEqual(notes[0]["source"], owc.RELEASE_0_13_4)
+        self.assertFalse(any("ENABLE_DIRECT_CONNECTIONS" in t for t in titles(owc.check_env({}, (0, 13, 4)))))
+
+    def test_debug_logging(self):
+        for value in ("DEBUG", "debug", " Debug "):
+            found = [f for f in owc.check_env({"GLOBAL_LOG_LEVEL": value}) if f["setting"] == "GLOBAL_LOG_LEVEL"]
+            self.assertEqual([f["severity"] for f in found], ["low"])
+        for env in ({}, {"GLOBAL_LOG_LEVEL": "INFO"}, {"GLOBAL_LOG_LEVEL": None}):
+            self.assertFalse(any(f["setting"] == "GLOBAL_LOG_LEVEL" for f in owc.check_env(env)))
+
 
 class VersionTests(unittest.TestCase):
     def test_versions(self):
@@ -189,10 +208,15 @@ class VersionTests(unittest.TestCase):
         self.assertNotIn("CVE-2026-87016", found[0]["detail"])
         self.assertEqual(owc.check_version((0, 13, 1)), [])
         self.assertEqual(owc.check_version((0, 13, 3)), [])
+        self.assertEqual(owc.check_version((0, 13, 4)), [])
         self.assertEqual(owc.check_version(None)[0]["severity"], "info")
         self.assertEqual(owc.check_version((0, 6, 0))[0]["title"], "Open WebUI 0.6.0 has 7 known advisories")
         self.assertEqual(owc.parse_version("v0.11.4-cuda"), (0, 11, 4))
         self.assertIsNone(owc.parse_version("main"))
+
+    def test_latest(self):
+        self.assertEqual(owc.LATEST, "0.13.4")
+        self.assertIn("the latest is 0.13.4", owc.check_version((0, 12, 5))[0]["fix"])
 
     def test_release_note_fixes_only(self):
         found = owc.check_version((0, 11, 4))

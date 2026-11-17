@@ -8,17 +8,23 @@ Check an Open WebUI deployment against the official [Hardening guide](https://do
 - Comes with an [agent skill](skills/openwebui-hardening-check/SKILL.md), so coding agents such as Claude Code, Codex or Cursor can run the check and explain the results.
 - One Python file, standard library only, read-only. **Secret values are never printed**: for `WEBUI_SECRET_KEY` it reports only whether the key is set, how long it is, and whether it's a well-known example value.
 
-Made with AI agents for MV2 of Munim, Inc. Advisory data was checked on 17 November 2026, up to Open WebUI 0.13.3 (8 November 2026).
+Made with AI agents for MV2 of Munim, Inc. Advisory data was checked on 17 November 2026, up to Open WebUI 0.13.4 (17 November 2026).
 
 Running Open WebUI for several clients? [ai-fleet-check](https://github.com/munimtechnologies/ai-fleet-check) runs this check (and the Dify one) over every client's deployment at once and writes a fleet summary, a report per client and tickets for your PSA.
 
-## Is 0.12.0 still current? No
+## Which version to run
 
 0.12.0 (10 October 2026) was the version to update to a month ago. Since then:
 - [GHSA-3vvh-g22g-jq6r](https://github.com/open-webui/open-webui/security/advisories/GHSA-3vvh-g22g-jq6r) (medium, published 18 October) was fixed in 0.12.2.
 - [0.12.5](https://github.com/open-webui/open-webui/releases/tag/v0.12.5), [0.13.0](https://github.com/open-webui/open-webui/releases/tag/v0.13.0) and [0.13.1](https://github.com/open-webui/open-webui/releases/tag/v0.13.1) each include security fixes that aren't listed yet. Open WebUI says it publishes the advisories once CVEs are assigned.
 
-So the tool now asks for **0.13.1 or newer** (0.13.3 is the latest). It rates versions with only these fixes as medium and names the High advisories fixed in 0.11.4 one by one. Back up the data volume before updating: 0.13.0 and 0.13.1 migrate the database and don't support rolling updates.
+So the tool asks for **0.13.1 or newer** (0.13.4 is the latest). It rates versions with only these fixes as medium and names the High advisories fixed in 0.11.4 one by one. Back up the data volume before updating: 0.13.0 and 0.13.1 migrate the database and don't support rolling updates.
+
+[0.13.4](https://github.com/open-webui/open-webui/releases/tag/v0.13.4) (17 November 2026) names no advisories. Two of its changes matter here:
+- It removes Direct Connections, so `ENABLE_DIRECT_CONNECTIONS` is no longer read. On 0.13.4 or newer the tool notes the leftover setting instead of flagging it. Tools and models that users added in their own settings disappear on update.
+- Knowledge and web searches now log file names and full results only when `GLOBAL_LOG_LEVEL=DEBUG`. The tool flags `DEBUG` as low: leave it on only while troubleshooting.
+
+Read its breaking changes before updating if you use Terminals (needs Terminals 0.4.0 or later) or build your own image.
 
 ## Quick start
 
@@ -44,7 +50,7 @@ Options:
 Example output (shortened):
 
 ```
-Open WebUI hardening check 0.1.3
+Open WebUI hardening check 0.1.4
 Checked: docker-compose.yml
 Open WebUI version: v0.11.2 (from the image tag)
 
@@ -53,7 +59,7 @@ HIGH      Open WebUI v0.11.2 has 8 known advisories
           their session token through the community-sharing message handler ...
           GHSA-f9xp-mfmq-x6cg (fixed in 0.11.4): Any signed-in user can steal another user's
           session token with a script inside a DOCX file preview (High). ...
-          Fix: Update to 0.13.1 or newer (the latest is 0.13.3 at the time of this data). ...
+          Fix: Update to 0.13.1 or newer (the latest is 0.13.4 at the time of this data). ...
 HIGH      Chat share links are on (ENABLE_COMMUNITY_SHARING)
 MEDIUM    CORS allows every origin (CORS_ALLOW_ORIGIN=*, the default)
 MEDIUM    Open WebUI's port 8080 is published on every network interface (host port 3000)
@@ -74,7 +80,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: munimtechnologies/openwebui-hardening-check@v0.1.3
+      - uses: munimtechnologies/openwebui-hardening-check@v0.1.4
         with:
           files: docker-compose.yml deploy/*.yaml   # spaces or new lines; wildcards work
           fail-on: high                              # critical, high, medium, low or never
@@ -86,7 +92,7 @@ jobs:
 - Files that don't exist are skipped with a warning.
 - `url` also works. Only use it for a server you run, and keep in mind that the job summary shows the address.
 
-It needs Python 3, which GitHub's Linux and macOS runners have. Pin a release tag (`@v0.1.3`) and update on purpose.
+It needs Python 3, which GitHub's Linux and macOS runners have. Pin a release tag (`@v0.1.4`) and update on purpose.
 
 ## For coding agents
 
@@ -106,7 +112,7 @@ From your files (or, inside Open WebUI, from the server's own environment):
 | Sessions | `WEBUI_SECRET_KEY` missing, short or a well-known example (such as the old default `t0p-s3cr3t`); a `.webui_secret_key` made by `open-webui serve` before 0.12.0 (see below); `JWT_EXPIRES_IN=-1`, values longer than 7 days, or values Open WebUI may not read (such as `86400` without a unit); cookie `Secure` and `SameSite` |
 | Network | `CORS_ALLOW_ORIGIN=*`, and entries that stop Open WebUI from starting or never match (see below); `FORWARDED_ALLOW_IPS=*`; port 8080 published on every interface; image tags such as `:main` that move |
 | SSO and LDAP | `OAUTH_MERGE_ACCOUNTS_BY_EMAIL`; OAuth sign-up without `OAUTH_ALLOWED_DOMAINS`; LDAP without TLS or certificate checks |
-| Data and features | community sharing, admin chat export, OpenAI passthrough, direct connections, API keys without endpoint restrictions, Jupyter code execution, runtime `pip install` by Tools, private-address web fetches (SSRF), TLS verification switched off, no audit log, `ENV=dev` |
+| Data and features | community sharing, admin chat export, OpenAI passthrough, direct connections (before 0.13.4), API keys without endpoint restrictions, Jupyter code execution, runtime `pip install` by Tools, private-address web fetches (SSRF), TLS verification switched off, no audit log, debug logging (`GLOBAL_LOG_LEVEL=DEBUG`), `ENV=dev` |
 | Version | every advisory in [`ADVISORIES`](owui_hardening_check.py) against the version from `--url`, the image tag or the running server. That includes the advisories fixed in 0.11.4 (the High ones are named one by one), GHSA-3vvh-g22g-jq6r (fixed in 0.12.2) and the security fixes in the 0.12.0, 0.12.5, 0.13.0 and 0.13.1 release notes. Updating to 0.13.1 or newer fixes all of them. |
 
 With `--url`, it reads only what any visitor's browser loads before signing in:
@@ -181,4 +187,4 @@ Open WebUI is a trademark of its owners. This project is not affiliated with or 
 python3 -m unittest test_owui_hardening_check.py test_action.py
 ```
 
-Apache-2.0 licensed. Sources: the [Open WebUI Hardening guide](https://docs.openwebui.com/getting-started/advanced-topics/hardening/), the [environment variable reference](https://docs.openwebui.com/reference/env-configuration/), [Open WebUI's security advisories](https://github.com/open-webui/open-webui/security/advisories), the [0.12.0](https://github.com/open-webui/open-webui/releases/tag/v0.12.0), [0.12.5](https://github.com/open-webui/open-webui/releases/tag/v0.12.5), [0.13.0](https://github.com/open-webui/open-webui/releases/tag/v0.13.0) and [0.13.1](https://github.com/open-webui/open-webui/releases/tag/v0.13.1) release notes, and [0.12.0's config.py](https://github.com/open-webui/open-webui/blob/v0.12.0/backend/open_webui/config.py).
+Apache-2.0 licensed. Sources: the [Open WebUI Hardening guide](https://docs.openwebui.com/getting-started/advanced-topics/hardening/), the [environment variable reference](https://docs.openwebui.com/reference/env-configuration/), [Open WebUI's security advisories](https://github.com/open-webui/open-webui/security/advisories), the [0.12.0](https://github.com/open-webui/open-webui/releases/tag/v0.12.0), [0.12.5](https://github.com/open-webui/open-webui/releases/tag/v0.12.5), [0.13.0](https://github.com/open-webui/open-webui/releases/tag/v0.13.0), [0.13.1](https://github.com/open-webui/open-webui/releases/tag/v0.13.1) and [0.13.4](https://github.com/open-webui/open-webui/releases/tag/v0.13.4) release notes, and [0.12.0's config.py](https://github.com/open-webui/open-webui/blob/v0.12.0/backend/open_webui/config.py).

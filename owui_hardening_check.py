@@ -2,7 +2,7 @@
 title: Open WebUI Hardening Check
 author: MV2 of Munim, Inc.
 author_url: https://github.com/munimtechnologies/openwebui-hardening-check
-version: 0.1.3
+version: 0.1.4
 license: Apache-2.0
 description: Checks an Open WebUI deployment against the official Hardening guide and known security advisories. Read-only, standard library only, and it never shows secret values. Made with AI agents for MV2 of Munim, Inc.
 """
@@ -26,13 +26,14 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 DATA_DATE = "17 November 2026"
 REPO = "https://github.com/munimtechnologies/openwebui-hardening-check"
 GUIDE = "https://docs.openwebui.com/getting-started/advanced-topics/hardening/"
 ADVISORY_PAGE = "https://github.com/open-webui/open-webui/security/advisories"
 RELEASE_0_12_0 = "https://github.com/open-webui/open-webui/releases/tag/v0.12.0"
 RELEASE_0_13_1 = "https://github.com/open-webui/open-webui/releases/tag/v0.13.1"
+RELEASE_0_13_4 = "https://github.com/open-webui/open-webui/releases/tag/v0.13.4"
 CONFIG_SOURCE = "https://github.com/open-webui/open-webui/blob/v0.12.0/backend/open_webui/config.py"
 PROBE_ORIGIN = "https://cors-check.invalid"
 
@@ -106,7 +107,9 @@ ADVISORIES = [
      RELEASE_0_13_1],
 ]
 SAFE_VERSION = "0.13.1"
-LATEST = "0.13.3"
+LATEST = "0.13.4"
+# 0.13.4 removed Direct Connections (ENABLE_DIRECT_CONNECTIONS is no longer read).
+DIRECT_CONNECTIONS_REMOVED = (0, 13, 4)
 
 # `open-webui serve` (pip installs) made .webui_secret_key with Python's random
 # module until 0.12.0 switched it to secrets; existing files are kept.
@@ -486,10 +489,16 @@ def check_env(env, version=None, inside=False):
             setting="ENABLE_RAG_LOCAL_WEB_FETCH"))
 
     if _flag(env, "ENABLE_DIRECT_CONNECTIONS", False):
-        out.append(finding(
-            "medium", "Direct connections are on (ENABLE_DIRECT_CONNECTIONS=True)",
-            "Set it to False unless users need their own API endpoints; their API keys get sent to the server.",
-            setting="ENABLE_DIRECT_CONNECTIONS"))
+        if version is not None and version >= DIRECT_CONNECTIONS_REMOVED:
+            out.append(finding(
+                "info", "ENABLE_DIRECT_CONNECTIONS is no longer read",
+                "Open WebUI 0.13.4 removed Direct Connections, so this setting does nothing now. You can delete it.",
+                source=RELEASE_0_13_4))
+        else:
+            out.append(finding(
+                "medium", "Direct connections are on (ENABLE_DIRECT_CONNECTIONS=True)",
+                "Set it to False unless users need their own API endpoints; their API keys get sent to the server.",
+                setting="ENABLE_DIRECT_CONNECTIONS"))
 
     api_keys = _flag(env, "ENABLE_API_KEYS", None)
     if api_keys is None:
@@ -551,6 +560,13 @@ def check_env(env, version=None, inside=False):
             "low", "No audit log (AUDIT_LOG_LEVEL=NONE, the default)",
             "Set AUDIT_LOG_LEVEL=METADATA and ENABLE_AUDIT_LOGS_FILE=true, so you can see who did what after an incident.",
             setting="AUDIT_LOG_LEVEL"))
+
+    log_level = _value(env, "GLOBAL_LOG_LEVEL", default="INFO")
+    if log_level is not None and log_level.strip().upper() == "DEBUG":
+        out.append(finding(
+            "low", "Debug logging is on (GLOBAL_LOG_LEVEL=DEBUG)",
+            "Use INFO (the default) except while troubleshooting. At DEBUG, Open WebUI writes knowledge file names and full knowledge and web search results to its logs, so chat content ends up wherever the logs go.",
+            setting="GLOBAL_LOG_LEVEL", source=RELEASE_0_13_4))
 
     if (env.get("ENV") or "").strip().lower() == "dev":
         out.append(finding(
