@@ -10,6 +10,8 @@ Check an Open WebUI deployment against the official [Hardening guide](https://do
 
 Made with AI agents for MV2 of Munim, Inc. Advisory data was checked on 17 November 2026, up to Open WebUI 0.13.3 (8 November 2026).
 
+Running Open WebUI for several clients? [ai-fleet-check](https://github.com/munimtechnologies/ai-fleet-check) runs this check (and the Dify one) over every client's deployment at once and writes a fleet summary, a report per client and tickets for your PSA.
+
 ## Is 0.12.0 still current? No
 
 0.12.0 (10 October 2026) was the version to update to a month ago. Since then:
@@ -169,7 +171,7 @@ After paying, email munimversion2@gmail.com three things:
 
 The review arrives within 48 hours of receiving everything. MV2 never asks for passwords, keys or remote access.
 
-Also by MV2: [dify-hardening-check](https://github.com/munimtechnologies/dify-hardening-check), the same kind of check for Dify.
+Also by MV2: [dify-hardening-check](https://github.com/munimtechnologies/dify-hardening-check), the same kind of check for Dify, and [ai-fleet-check](https://github.com/munimtechnologies/ai-fleet-check), which runs both over many clients' deployments at once.
 
 Open WebUI is a trademark of its owners. This project is not affiliated with or endorsed by Open WebUI.
 
