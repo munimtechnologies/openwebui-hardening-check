@@ -81,6 +81,7 @@ class ParseTests(unittest.TestCase):
         found = owc.check_deployment(dep)
         self.assertEqual(len(by_severity(found, "medium")), 1)       # only the port without 127.0.0.1
         self.assertTrue(any("tag moves" in t for t in titles(found)))
+        self.assertIn("v%s" % owc.LATEST, [f for f in found if "tag moves" in f["title"]][0]["fix"])
 
     def test_docker_inspect(self):
         data = [{"Config": {"Env": ["WEBUI_AUTH=False", "PATH=/usr/bin"], "Image": "ghcr.io/open-webui/open-webui:main"},
@@ -180,22 +181,33 @@ class EnvCheckTests(unittest.TestCase):
 class VersionTests(unittest.TestCase):
     def test_versions(self):
         found = owc.check_version((0, 11, 2), "v0.11.2")
-        self.assertEqual(found[0]["title"], "Open WebUI v0.11.2 has 6 known advisories")
+        self.assertEqual(found[0]["title"], "Open WebUI v0.11.2 has 8 known advisories")
         self.assertEqual(found[0]["severity"], "high")
         self.assertIn("GHSA-vpq8-f445-hcq7", found[0]["detail"])
         self.assertIn("GHSA-f9xp-mfmq-x6cg", found[0]["detail"])
+        self.assertIn("GHSA-3vvh-g22g-jq6r", found[0]["detail"])
         self.assertNotIn("CVE-2026-87016", found[0]["detail"])
-        self.assertEqual(owc.check_version((0, 12, 0)), [])
+        self.assertEqual(owc.check_version((0, 13, 1)), [])
+        self.assertEqual(owc.check_version((0, 13, 3)), [])
         self.assertEqual(owc.check_version(None)[0]["severity"], "info")
-        self.assertEqual(owc.check_version((0, 6, 0))[0]["title"], "Open WebUI 0.6.0 has 6 known advisories")
+        self.assertEqual(owc.check_version((0, 6, 0))[0]["title"], "Open WebUI 0.6.0 has 7 known advisories")
         self.assertEqual(owc.parse_version("v0.11.4-cuda"), (0, 11, 4))
         self.assertIsNone(owc.parse_version("main"))
 
     def test_release_note_fixes_only(self):
         found = owc.check_version((0, 11, 4))
-        self.assertEqual(found[0]["title"], "Open WebUI 0.11.4 has 1 known advisory")
+        self.assertEqual(found[0]["title"], "Open WebUI 0.11.4 has 3 known advisories")
         self.assertEqual(found[0]["severity"], "medium")
-        self.assertIn("0.12.0", found[0]["fix"])
+        self.assertIn("0.13.1", found[0]["fix"])
+
+    def test_medium_advisory_stays_medium(self):
+        found = owc.check_version((0, 12, 0))
+        self.assertEqual(found[0]["title"], "Open WebUI 0.12.0 has 2 known advisories")
+        self.assertEqual(found[0]["severity"], "medium")
+        self.assertIn("GHSA-3vvh-g22g-jq6r", found[0]["detail"])
+        found = owc.check_version((0, 12, 5))
+        self.assertEqual(found[0]["title"], "Open WebUI 0.12.5 has 1 known advisory")
+        self.assertNotIn("GHSA-3vvh-g22g-jq6r", found[0]["detail"])
 
 
 class KeyFileTests(unittest.TestCase):
@@ -319,6 +331,17 @@ class PipeTests(unittest.TestCase):
         self.assertIn("Sign-in is switched off", reply)
         self.assertIn("### Critical", reply)
         self.assertNotIn("changeme", reply)
+
+
+@unittest.skipUnless(os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), "skills",
+                                                 "openwebui-hardening-check", "SKILL.md")), "skill not next to the tests")
+class SkillTests(unittest.TestCase):
+    def test_frontmatter(self):
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "skills", "openwebui-hardening-check", "SKILL.md")
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        self.assertTrue(text.startswith("---\nname: openwebui-hardening-check\ndescription: "))
+        self.assertIn("\n---\n", text[4:])
 
 
 if __name__ == "__main__":

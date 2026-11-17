@@ -2,7 +2,7 @@
 title: Open WebUI Hardening Check
 author: MV2 of Munim, Inc.
 author_url: https://github.com/munimtechnologies/openwebui-hardening-check
-version: 0.1.2
+version: 0.1.3
 license: Apache-2.0
 description: Checks an Open WebUI deployment against the official Hardening guide and known security advisories. Read-only, standard library only, and it never shows secret values. Made with AI agents for MV2 of Munim, Inc.
 """
@@ -26,12 +26,13 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
-__version__ = "0.1.2"
-DATA_DATE = "14 October 2026"
+__version__ = "0.1.3"
+DATA_DATE = "17 November 2026"
 REPO = "https://github.com/munimtechnologies/openwebui-hardening-check"
 GUIDE = "https://docs.openwebui.com/getting-started/advanced-topics/hardening/"
 ADVISORY_PAGE = "https://github.com/open-webui/open-webui/security/advisories"
 RELEASE_0_12_0 = "https://github.com/open-webui/open-webui/releases/tag/v0.12.0"
+RELEASE_0_13_1 = "https://github.com/open-webui/open-webui/releases/tag/v0.13.1"
 CONFIG_SOURCE = "https://github.com/open-webui/open-webui/blob/v0.12.0/backend/open_webui/config.py"
 PROBE_ORIGIN = "https://cors-check.invalid"
 
@@ -57,8 +58,9 @@ WEAK_SECRETS = {
     "123456", "12345678", "supersecret", "super-secret", "openwebui", "open-webui",
 }
 
-# Open WebUI advisories: [first affected or None, fixed in, ids, summary, source].
-# Checked against the linked advisories on 14 October 2026.
+# Open WebUI advisories: [first affected or None, fixed in, ids, summary, source(, severity)].
+# Without a severity, an entry with a GHSA or CVE id counts as high and one known
+# only from release notes as medium. Checked against the linked advisories on 17 November 2026.
 ADVISORIES = [
     [None, "0.9.0", "CVE-2026-44721, CVE-2026-45349",
      "Stored XSS through models; a user with an API key can continue another user's chat.",
@@ -96,8 +98,15 @@ ADVISORIES = [
     [None, "0.12.0", "0.12.0 release notes",
      "Security and access-control fixes, for example admins acting on other users' chats through the API, shared chats showing the owner's system prompt, and private-address checks on skill imports. Open WebUI withholds some advisories for a short time so admins can update first.",
      RELEASE_0_12_0],
+    ["0.7.0", "0.12.2", "GHSA-3vvh-g22g-jq6r",
+     "Channel members can post messages that look like they came from a webhook, through message metadata the client sends (Medium).",
+     ADVISORY_PAGE + "/GHSA-3vvh-g22g-jq6r", "medium"],
+    [None, "0.13.1", "0.12.5, 0.13.0 and 0.13.1 release notes",
+     "Each of these releases has security fixes that aren't listed yet; Open WebUI publishes the advisories once CVEs are assigned. 0.13.1 also masks API keys, tokens and secrets from the admin settings in the audit log.",
+     RELEASE_0_13_1],
 ]
-SAFE_VERSION = "0.12.0"
+SAFE_VERSION = "0.13.1"
+LATEST = "0.13.3"
 
 # `open-webui serve` (pip installs) made .webui_secret_key with Python's random
 # module until 0.12.0 switched it to secrets; existing files are kept.
@@ -577,7 +586,7 @@ def check_deployment(dep):
         if not parse_version(_tag(image)):
             out.append(finding(
                 "low", "The image tag moves (%s)" % image,
-                "Pin a release tag such as ghcr.io/open-webui/open-webui:v%s or newer, and update on purpose after reading the release notes." % SAFE_VERSION,
+                "Pin a release tag such as ghcr.io/open-webui/open-webui:v%s or newer, and update on purpose after reading the release notes." % LATEST,
                 source=GUIDE))
     for host_ip, host_port, container_port in dep.ports:
         if container_port == "8080" and host_ip in ("", "0.0.0.0", "[::]", "::"):
@@ -604,18 +613,21 @@ def check_version(version, label=""):
             "info", "Open WebUI version unknown",
             "Run the check with --url, pin a release tag in your image, or look under Settings > About.",
             source=ADVISORY_PAGE)]
-    hits, published = [], False
-    for first, fixed, ids, summary, source in ADVISORIES:
+    hits, severity = [], "medium"
+    for entry in ADVISORIES:
+        first, fixed, ids, summary, source = entry[:5]
         if (first is None or version >= parse_version(first)) and version < parse_version(fixed):
             hits.append("%s (fixed in %s): %s %s" % (ids, fixed, summary, source))
-            published = published or "GHSA-" in ids or "CVE-" in ids
+            published = "GHSA-" in ids or "CVE-" in ids
+            # Fixes known only from release notes, without a published advisory, count as medium.
+            if (entry[5] if len(entry) > 5 else ("high" if published else "medium")) == "high":
+                severity = "high"
     if not hits:
         return []
-    # Fixes known only from release notes, without a published advisory, count as medium.
     return [finding(
-        "high" if published else "medium",
+        severity,
         "Open WebUI %s has %d known advisor%s" % (label or ".".join(map(str, version)), len(hits), "y" if len(hits) == 1 else "ies"),
-        "Update to %s or newer; the latest release is safest. Then use Sign out all devices so stolen tokens stop working." % SAFE_VERSION,
+        "Update to %s or newer (the latest is %s at the time of this data). Back up the data volume first: 0.13.0 and 0.13.1 migrate the database and don't support rolling updates. Then use Sign out all devices so stolen tokens stop working." % (SAFE_VERSION, LATEST),
         detail="\n".join(hits), source=ADVISORY_PAGE)]
 
 

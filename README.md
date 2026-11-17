@@ -5,9 +5,18 @@ Check an Open WebUI deployment against the official [Hardening guide](https://do
 - Reads your `docker-compose.yml`, `.env`, `docker inspect` output, `docker run` command or Kubernetes manifest. It can also check the address of a server you run.
 - Installs as an Open WebUI Function too, so an admin can check the running server from a chat.
 - Runs as a GitHub Action, so a pull request that weakens your deployment files fails before it ships.
+- Comes with an [agent skill](skills/openwebui-hardening-check/SKILL.md), so coding agents such as Claude Code, Codex or Cursor can run the check and explain the results.
 - One Python file, standard library only, read-only. **Secret values are never printed**: for `WEBUI_SECRET_KEY` it reports only whether the key is set, how long it is, and whether it's a well-known example value.
 
-Made with AI agents for MV2 of Munim, Inc. Advisory data was checked on 14 October 2026, including Open WebUI 0.12.0 (10 October 2026).
+Made with AI agents for MV2 of Munim, Inc. Advisory data was checked on 17 November 2026, up to Open WebUI 0.13.3 (8 November 2026).
+
+## Is 0.12.0 still current? No
+
+0.12.0 (10 October 2026) was the version to update to a month ago. Since then:
+- [GHSA-3vvh-g22g-jq6r](https://github.com/open-webui/open-webui/security/advisories/GHSA-3vvh-g22g-jq6r) (medium, published 18 October) was fixed in 0.12.2.
+- [0.12.5](https://github.com/open-webui/open-webui/releases/tag/v0.12.5), [0.13.0](https://github.com/open-webui/open-webui/releases/tag/v0.13.0) and [0.13.1](https://github.com/open-webui/open-webui/releases/tag/v0.13.1) each include security fixes that aren't listed yet. Open WebUI says it publishes the advisories once CVEs are assigned.
+
+So the tool now asks for **0.13.1 or newer** (0.13.3 is the latest). It rates versions with only these fixes as medium and names the High advisories fixed in 0.11.4 one by one. Back up the data volume before updating: 0.13.0 and 0.13.1 migrate the database and don't support rolling updates.
 
 ## Quick start
 
@@ -33,16 +42,16 @@ Options:
 Example output (shortened):
 
 ```
-Open WebUI hardening check 0.1.2
+Open WebUI hardening check 0.1.3
 Checked: docker-compose.yml
 Open WebUI version: v0.11.2 (from the image tag)
 
-HIGH      Open WebUI v0.11.2 has 6 known advisories
+HIGH      Open WebUI v0.11.2 has 8 known advisories
           GHSA-vpq8-f445-hcq7 (fixed in 0.11.4): Any website a signed-in user visits can steal
           their session token through the community-sharing message handler ...
           GHSA-f9xp-mfmq-x6cg (fixed in 0.11.4): Any signed-in user can steal another user's
           session token with a script inside a DOCX file preview (High). ...
-          Fix: Update to 0.12.0 or newer; the latest release is safest. ...
+          Fix: Update to 0.13.1 or newer (the latest is 0.13.3 at the time of this data). ...
 HIGH      Chat share links are on (ENABLE_COMMUNITY_SHARING)
 MEDIUM    CORS allows every origin (CORS_ALLOW_ORIGIN=*, the default)
 MEDIUM    Open WebUI's port 8080 is published on every network interface (host port 3000)
@@ -63,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: munimtechnologies/openwebui-hardening-check@v0.1.2
+      - uses: munimtechnologies/openwebui-hardening-check@v0.1.3
         with:
           files: docker-compose.yml deploy/*.yaml   # spaces or new lines; wildcards work
           fail-on: high                              # critical, high, medium, low or never
@@ -75,7 +84,15 @@ jobs:
 - Files that don't exist are skipped with a warning.
 - `url` also works. Only use it for a server you run, and keep in mind that the job summary shows the address.
 
-It needs Python 3, which GitHub's Linux and macOS runners have. Pin a release tag (`@v0.1.2`) and update on purpose.
+It needs Python 3, which GitHub's Linux and macOS runners have. Pin a release tag (`@v0.1.3`) and update on purpose.
+
+## For coding agents
+
+[`skills/openwebui-hardening-check/SKILL.md`](skills/openwebui-hardening-check/SKILL.md) tells an agent how to run the check on an Open WebUI deployment, read the report and walk the user through fixes without ever printing secret values. Install it with the open [skills](https://github.com/vercel-labs/skills) CLI:
+
+```sh
+npx skills add munimtechnologies/openwebui-hardening-check
+```
 
 ## What it checks
 
@@ -88,7 +105,7 @@ From your files (or, inside Open WebUI, from the server's own environment):
 | Network | `CORS_ALLOW_ORIGIN=*`, and entries that stop Open WebUI from starting or never match (see below); `FORWARDED_ALLOW_IPS=*`; port 8080 published on every interface; image tags such as `:main` that move |
 | SSO and LDAP | `OAUTH_MERGE_ACCOUNTS_BY_EMAIL`; OAuth sign-up without `OAUTH_ALLOWED_DOMAINS`; LDAP without TLS or certificate checks |
 | Data and features | community sharing, admin chat export, OpenAI passthrough, direct connections, API keys without endpoint restrictions, Jupyter code execution, runtime `pip install` by Tools, private-address web fetches (SSRF), TLS verification switched off, no audit log, `ENV=dev` |
-| Version | every advisory in [`ADVISORIES`](owui_hardening_check.py) against the version from `--url`, the image tag or the running server, including the advisories fixed in 0.11.4 and published on 27 and 28 September 2026 (the High ones are named one by one) and the security fixes in the 0.12.0 release notes. Updating to 0.12.0 or newer fixes all of them. |
+| Version | every advisory in [`ADVISORIES`](owui_hardening_check.py) against the version from `--url`, the image tag or the running server. That includes the advisories fixed in 0.11.4 (the High ones are named one by one), GHSA-3vvh-g22g-jq6r (fixed in 0.12.2) and the security fixes in the 0.12.0, 0.12.5, 0.13.0 and 0.13.1 release notes. Updating to 0.13.1 or newer fixes all of them. |
 
 With `--url`, it reads only what any visitor's browser loads before signing in:
 - `/api/config`, which the sign-in page uses. It shows the version, whether sign-in or sign-up is on, and whether **no admin account exists yet**. In that state, the next visitor becomes admin.
@@ -133,7 +150,7 @@ The function reads the server's own environment variables and version, plus the 
 
 - **Settings saved in the database win.** After the first start, Open WebUI saves settings such as sign-up, default role, community sharing and JWT expiry in its database, and the saved values take precedence over the environment. That holds unless `ENABLE_PERSISTENT_CONFIG=False`. Findings for these settings say so; compare them with **Admin Panel > Settings**.
 - **Some values can't be read.** Values that come from elsewhere (`${VAR}` without a default, Kubernetes `valueFrom`, `$(command)`) are treated as unknown and not judged.
-- **Withheld advisories.** Open WebUI holds back some advisories for a short time after a release so admins can update. The tool counts the 0.12.0 fixes from the release notes until those advisories are published.
+- **Withheld advisories.** Open WebUI holds back some advisories after a release until CVEs are assigned. The tool counts those fixes from the release notes (as medium) until the advisories are published.
 - **Not a scanner or a certification.** This is general technical information. It doesn't scan networks or test for vulnerabilities.
 
 If a range or a default is wrong or out of date, please [open an issue](https://github.com/munimtechnologies/openwebui-hardening-check/issues).
@@ -162,4 +179,4 @@ Open WebUI is a trademark of its owners. This project is not affiliated with or 
 python3 -m unittest test_owui_hardening_check.py test_action.py
 ```
 
-Apache-2.0 licensed. Sources: the [Open WebUI Hardening guide](https://docs.openwebui.com/getting-started/advanced-topics/hardening/), the [environment variable reference](https://docs.openwebui.com/reference/env-configuration/), [Open WebUI's security advisories](https://github.com/open-webui/open-webui/security/advisories), the [0.12.0 release notes](https://github.com/open-webui/open-webui/releases/tag/v0.12.0) and [0.12.0's config.py](https://github.com/open-webui/open-webui/blob/v0.12.0/backend/open_webui/config.py).
+Apache-2.0 licensed. Sources: the [Open WebUI Hardening guide](https://docs.openwebui.com/getting-started/advanced-topics/hardening/), the [environment variable reference](https://docs.openwebui.com/reference/env-configuration/), [Open WebUI's security advisories](https://github.com/open-webui/open-webui/security/advisories), the [0.12.0](https://github.com/open-webui/open-webui/releases/tag/v0.12.0), [0.12.5](https://github.com/open-webui/open-webui/releases/tag/v0.12.5), [0.13.0](https://github.com/open-webui/open-webui/releases/tag/v0.13.0) and [0.13.1](https://github.com/open-webui/open-webui/releases/tag/v0.13.1) release notes, and [0.12.0's config.py](https://github.com/open-webui/open-webui/blob/v0.12.0/backend/open_webui/config.py).
