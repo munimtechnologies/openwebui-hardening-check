@@ -3,7 +3,7 @@
 Check an Open WebUI deployment against the official [Hardening guide](https://docs.openwebui.com/getting-started/advanced-topics/hardening/) and Open WebUI's known security advisories, in one command.
 
 - Reads your `docker-compose.yml`, `.env`, `docker inspect` output, `docker run` command or Kubernetes manifest. It can also check the address of a server you run.
-- Installs as an Open WebUI Function too, so an admin can check the running server from a chat.
+- Installs as an Open WebUI Function too, so an admin can check the running server from a chat. It's on the Open WebUI community site as [Hardening check](https://openwebui.com/posts/cf8a62ad-c523-4cf7-9ea7-5a80447db2a7).
 - Runs as a GitHub Action, so a pull request that weakens your deployment files fails before it ships.
 - Comes with an [agent skill](skills/openwebui-hardening-check/SKILL.md), so coding agents such as Claude Code, Codex or Cursor can run the check and explain the results.
 - One Python file, standard library only, read-only. **Secret values are never printed**: for `WEBUI_SECRET_KEY` it reports only whether the key is set, how long it is, and whether it's a well-known example value.
@@ -140,8 +140,8 @@ Give the file to the tool and it looks only at the file's date, never its conten
 
 ### Inside Open WebUI (Function)
 
-1. In Open WebUI, go to **Admin Panel > Functions > +** (new function).
-2. Paste the contents of `owui_hardening_check.py`, then save and enable it.
+1. In Open WebUI, go to **Admin Panel > Functions > +** (new function), or open [Hardening check on openwebui.com](https://openwebui.com/posts/cf8a62ad-c523-4cf7-9ea7-5a80447db2a7) and import it into your server from there.
+2. If you add it by hand, paste the contents of `owui_hardening_check.py`, then save and enable it.
 3. Start a chat with the **Hardening check** model and send any message. Only admins get a report; everyone else gets a refusal.
 
 The function reads the server's own environment variables and version, plus the date of a pip install's `.webui_secret_key`. It doesn't install packages or make network requests.
