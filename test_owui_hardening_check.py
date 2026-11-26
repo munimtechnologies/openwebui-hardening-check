@@ -198,39 +198,39 @@ class EnvCheckTests(unittest.TestCase):
 
 
 class VersionTests(unittest.TestCase):
+    # Counts include the 0.13.5 release-note entry (added in 0.1.5) for every version before 0.13.5.
     def test_versions(self):
         found = owc.check_version((0, 11, 2), "v0.11.2")
-        self.assertEqual(found[0]["title"], "Open WebUI v0.11.2 has 8 known advisories")
+        self.assertEqual(found[0]["title"], "Open WebUI v0.11.2 has 9 known advisories")
         self.assertEqual(found[0]["severity"], "high")
         self.assertIn("GHSA-vpq8-f445-hcq7", found[0]["detail"])
         self.assertIn("GHSA-f9xp-mfmq-x6cg", found[0]["detail"])
         self.assertIn("GHSA-3vvh-g22g-jq6r", found[0]["detail"])
         self.assertNotIn("CVE-2026-87016", found[0]["detail"])
-        self.assertEqual(owc.check_version((0, 13, 1)), [])
-        self.assertEqual(owc.check_version((0, 13, 3)), [])
-        self.assertEqual(owc.check_version((0, 13, 4)), [])
+        self.assertEqual(owc.check_version((0, 13, 5)), [])
+        self.assertEqual(owc.check_version((0, 13, 6)), [])
         self.assertEqual(owc.check_version(None)[0]["severity"], "info")
-        self.assertEqual(owc.check_version((0, 6, 0))[0]["title"], "Open WebUI 0.6.0 has 7 known advisories")
+        self.assertEqual(owc.check_version((0, 6, 0))[0]["title"], "Open WebUI 0.6.0 has 8 known advisories")
         self.assertEqual(owc.parse_version("v0.11.4-cuda"), (0, 11, 4))
         self.assertIsNone(owc.parse_version("main"))
 
     def test_latest(self):
-        self.assertEqual(owc.LATEST, "0.13.4")
-        self.assertIn("the latest is 0.13.4", owc.check_version((0, 12, 5))[0]["fix"])
+        self.assertEqual(owc.LATEST, "0.13.5")
+        self.assertIn("the latest is 0.13.5", owc.check_version((0, 12, 5))[0]["fix"])
 
     def test_release_note_fixes_only(self):
         found = owc.check_version((0, 11, 4))
-        self.assertEqual(found[0]["title"], "Open WebUI 0.11.4 has 3 known advisories")
+        self.assertEqual(found[0]["title"], "Open WebUI 0.11.4 has 4 known advisories")
         self.assertEqual(found[0]["severity"], "medium")
-        self.assertIn("0.13.1", found[0]["fix"])
+        self.assertIn("Update to 0.13.5 or newer", found[0]["fix"])
 
     def test_medium_advisory_stays_medium(self):
         found = owc.check_version((0, 12, 0))
-        self.assertEqual(found[0]["title"], "Open WebUI 0.12.0 has 2 known advisories")
+        self.assertEqual(found[0]["title"], "Open WebUI 0.12.0 has 3 known advisories")
         self.assertEqual(found[0]["severity"], "medium")
         self.assertIn("GHSA-3vvh-g22g-jq6r", found[0]["detail"])
         found = owc.check_version((0, 12, 5))
-        self.assertEqual(found[0]["title"], "Open WebUI 0.12.5 has 1 known advisory")
+        self.assertEqual(found[0]["title"], "Open WebUI 0.12.5 has 2 known advisories")
         self.assertNotIn("GHSA-3vvh-g22g-jq6r", found[0]["detail"])
 
 

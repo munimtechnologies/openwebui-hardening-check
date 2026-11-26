@@ -40,7 +40,7 @@ Source and docs: https://github.com/munimtechnologies/openwebui-hardening-check
 - Never print, paste or echo `WEBUI_SECRET_KEY`, API keys, OAuth client secrets or database URLs from the user's files. The tool reports only names, lengths and whether a value is a known example; keep it that way.
 - Generate new secrets on the user's machine (`openssl rand -base64 32`). Replacing `WEBUI_SECRET_KEY` signs everyone out once.
 - Many settings (sign-up, default role, community sharing, JWT expiry) are saved in Open WebUI's database after the first start and override the environment. Tell the user to check **Admin Panel > Settings** too.
-- Before updating, back up the data volume. 0.13.0 and 0.13.1 migrate the database and don't support rolling updates.
+- Before updating, back up the database and data volume. 0.13.0, 0.13.1 and 0.13.5 migrate the database: stop every worker and update them all together (no rolling updates).
 - Do not probe servers the user doesn't run, and don't scan networks. This is a configuration check, not a penetration test.
 
 ## Results

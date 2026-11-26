@@ -2,7 +2,7 @@
 title: Open WebUI Hardening Check
 author: MV2 of Munim, Inc.
 author_url: https://github.com/munimtechnologies/openwebui-hardening-check
-version: 0.1.4
+version: 0.1.5
 license: Apache-2.0
 description: Checks an Open WebUI deployment against the official Hardening guide and known security advisories. Read-only, standard library only, and it never shows secret values. Made with AI agents for MV2 of Munim, Inc.
 """
@@ -26,14 +26,15 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
-__version__ = "0.1.4"
-DATA_DATE = "17 November 2026"
+__version__ = "0.1.5"
+DATA_DATE = "26 November 2026"
 REPO = "https://github.com/munimtechnologies/openwebui-hardening-check"
 GUIDE = "https://docs.openwebui.com/getting-started/advanced-topics/hardening/"
 ADVISORY_PAGE = "https://github.com/open-webui/open-webui/security/advisories"
 RELEASE_0_12_0 = "https://github.com/open-webui/open-webui/releases/tag/v0.12.0"
 RELEASE_0_13_1 = "https://github.com/open-webui/open-webui/releases/tag/v0.13.1"
 RELEASE_0_13_4 = "https://github.com/open-webui/open-webui/releases/tag/v0.13.4"
+RELEASE_0_13_5 = "https://github.com/open-webui/open-webui/releases/tag/v0.13.5"
 CONFIG_SOURCE = "https://github.com/open-webui/open-webui/blob/v0.12.0/backend/open_webui/config.py"
 PROBE_ORIGIN = "https://cors-check.invalid"
 
@@ -61,7 +62,7 @@ WEAK_SECRETS = {
 
 # Open WebUI advisories: [first affected or None, fixed in, ids, summary, source(, severity)].
 # Without a severity, an entry with a GHSA or CVE id counts as high and one known
-# only from release notes as medium. Checked against the linked advisories on 17 November 2026.
+# only from release notes as medium. Checked against the linked advisories on 26 November 2026.
 ADVISORIES = [
     [None, "0.9.0", "CVE-2026-44721, CVE-2026-45349",
      "Stored XSS through models; a user with an API key can continue another user's chat.",
@@ -105,9 +106,12 @@ ADVISORIES = [
     [None, "0.13.1", "0.12.5, 0.13.0 and 0.13.1 release notes",
      "Each of these releases has security fixes that aren't listed yet; Open WebUI publishes the advisories once CVEs are assigned. 0.13.1 also masks API keys, tokens and secrets from the admin settings in the audit log.",
      RELEASE_0_13_1],
+    [None, "0.13.5", "0.13.5 release notes",
+     "Open WebUI asks admins to update to 0.13.5 promptly for its security fixes; the advisories are published once CVEs are assigned.",
+     RELEASE_0_13_5],
 ]
-SAFE_VERSION = "0.13.1"
-LATEST = "0.13.4"
+SAFE_VERSION = "0.13.5"
+LATEST = "0.13.5"
 # 0.13.4 removed Direct Connections (ENABLE_DIRECT_CONNECTIONS is no longer read).
 DIRECT_CONNECTIONS_REMOVED = (0, 13, 4)
 
@@ -643,7 +647,7 @@ def check_version(version, label=""):
     return [finding(
         severity,
         "Open WebUI %s has %d known advisor%s" % (label or ".".join(map(str, version)), len(hits), "y" if len(hits) == 1 else "ies"),
-        "Update to %s or newer (the latest is %s at the time of this data). Back up the data volume first: 0.13.0 and 0.13.1 migrate the database and don't support rolling updates. Then use Sign out all devices so stolen tokens stop working." % (SAFE_VERSION, LATEST),
+        "Update to %s or newer (the latest is %s at the time of this data). Back up the database and data volume first: 0.13.0, 0.13.1 and 0.13.5 migrate the database, so stop every worker and update them all together (no rolling updates). Then use Sign out all devices so stolen tokens stop working." % (SAFE_VERSION, LATEST),
         detail="\n".join(hits), source=ADVISORY_PAGE)]
 
 
